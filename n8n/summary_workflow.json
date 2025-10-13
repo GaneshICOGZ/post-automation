@@ -1,0 +1,126 @@
+{
+  "name": "AI Content Summary Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "summary",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-summary",
+      "name": "Webhook (Summary)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Create a concise, engaging summary for a social media campaign based on the following topic and description.\\n\\nTopic: {{$node[\\\"Webhook (Summary)\\\"].json[\\\"topic\\\"]}}\\n\\nDescription: {{$node[\\\"Webhook (Summary)\\\"].json[\\\"description\\\"]}}\\n\\n{{#if $node[\\\"Webhook (Summary)\\\"].json[\\\"user_style\\\"]}}Style: {{$node[\\\"Webhook (Summary)\\\"].json[\\\"user_style\\\"]}}\\n{{/if}}{{#if $node[\\\"Webhook (Summary)\\\"].json[\\\"user_focus\\\"]}}Focus: {{$node[\\\"Webhook (Summary)\\\"].json[\\\"user_focus\\\"]}}\\n{{/if}}{{#if $node[\\\"Webhook (Summary)\\\"].json[\\\"brand_info\\\"]}}Brand: {{$node[\\\"Webhook (Summary)\\\"].json[\\\"brand_info\\\"]}}\\n{{/if}}\\n\\nProvide a compelling summary suitable for social media content creation."
+          }
+        ],
+        "options": {}
+      },
+      "id": "gemini-summary",
+      "name": "Gemini (Summary)",
+      "type": "n8n-nodes-base.googleGeminiChatModel",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "googleGeminiApi": {
+          "id": "google-gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "summary",
+              "value": "={{ $node[\\\"Gemini (Summary)\\\"].json[\\\"messages\\\"][0][\\\"content\\\"] }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $node[\\\"Webhook (Summary)\\\"].json[\\\"user_id\\\"] }}"
+            },
+            {
+              "name": "post_id",
+              "value": "={{ $node[\\\"Webhook (Summary)\\\"].json[\\\"post_id\\\"] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-summary-output",
+      "name": "Set Summary Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $node[\\\"Set Summary Output\\\"].json }}"
+      },
+      "id": "respond-to-backend",
+      "name": "Respond to Backend",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook (Summary)": {
+      "main": [
+        [
+          {
+            "node": "Gemini (Summary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini (Summary)": {
+      "main": [
+        [
+          {
+            "node": "Set Summary Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Summary Output": {
+      "main": [
+        [
+          {
+            "node": "Respond to Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}

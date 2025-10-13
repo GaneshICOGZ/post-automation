@@ -1,0 +1,274 @@
+{
+  "name": "AI Content Post Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-posts",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-postgen",
+      "name": "Webhook (Post Generation)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "summary",
+              "value": "={{ $node[\\\"Webhook (Post Generation)\\\"].json[\\\"summary\\\"] }}"
+            },
+            {
+              "name": "platforms",
+              "value": "={{ $node[\\\"Webhook (Post Generation)\\\"].json[\\\"platforms\\\"] }}"
+            },
+            {
+              "name": "style",
+              "value": "={{ $node[\\\"Webhook (Post Generation)\\\"].json[\\\"user_style\\\"] || \\\"professional\\\" }}"
+            },
+            {
+              "name": "focus",
+              "value": "={{ $node[\\\"Webhook (Post Generation)\\\"].json[\\\"user_focus\\\"] || \\\"general\\\" }}"
+            },
+            {
+              "name": "brand",
+              "value": "={{ $node[\\\"Webhook (Post Generation)\\\"].json[\\\"brand_info\\\"] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-input-data",
+      "name": "Set Input Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop through platforms and create content for each\\nconst platforms = $node[\\\"Set Input Data\\\"].json[\\\"platforms\\\"];\\nconst summary = $node[\\\"Set Input Data\\\"].json[\\\"summary\\\"];\\nconst style = $node[\\\"Set Input Data\\\"].json[\\\"style\\\"];\\nconst focus = $node[\\\"Set Input Data\\\"].json[\\\"focus\\\"];\\nconst brand = $node[\\\"Set Input Data\\\"].json[\\\"brand\\\"];\\n\\nconst results = [];\\n\\nfor (const platform of platforms) {\\n  results.push({\\n    json: {\\n      platform: platform,\\n      summary: summary,\\n      style: style,\\n      focus: focus,\\n      brand: brand\\n    }\\n  });\\n}\\n\\nreturn results;"
+      },
+      "id": "split-platforms",
+      "name": "Split Platforms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 3,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Generate a social media post for {{$node[\\\"Split Platforms\\\"].json[\\\"platform\\\"]}} based on this summary: {{$node[\\\"Split Platforms\\\"].json[\\\"summary\\\"]}}\\n\\nStyle: {{$node[\\\"Split Platforms\\\"].json[\\\"style\\\"]}}\\nFocus: {{$node[\\\"Split Platforms\\\"].json[\\\"focus\\\"]}}\\n{{#if $node[\\\"Split Platforms\\\"].json[\\\"brand\\\"]}}Brand: {{$node[\\\"Split Platforms\\\"].json[\\\"brand\\\"]}}\\n{{/if}}\\n\\nMake it engaging and appropriate for the platform. Return just the post content."
+          }
+        ],
+        "options": {}
+      },
+      "id": "gemini-post-text",
+      "name": "Gemini (Post Text)",
+      "type": "n8n-nodes-base.googleGeminiChatModel",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ],
+      "credentials": {
+        "googleGeminiApi": {
+          "id": "google-gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Generate an image description for {{$node[\\\"Gemini (Post Text)\\\"].json[\\\"platform\\\"]}} social media post. \\n\\nPost Content: {{$node[\\\"Gemini (Post Text)\\\"].json[\\\"messages\\\"][0][\\\"content\\\"]}}\\n\\nSummary: {{$node[\\\"Gemini (Post Text)\\\"].json[\\\"summary\\\"]}}\\n\\nCreate a detailed prompt for DALL-E or similar AI image generator. Make it visually appealing and relevant to the post content."
+          }
+        ],
+        "options": {}
+      },
+      "id": "gemini-image-prompt",
+      "name": "Gemini (Image Prompt)",
+      "type": "n8n-nodes-base.googleGeminiChatModel",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ],
+      "credentials": {
+        "googleGeminiApi": {
+          "id": "google-gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "generate",
+        "size": "1024x1024",
+        "model": "dall-e-3",
+        "prompt": "={{ $node[\\\"Gemini (Image Prompt)\\\"].json[\\\"messages\\\"][0][\\\"content\\\"] }}",
+        "options": {}
+      },
+      "id": "openai-image-gen",
+      "name": "OpenAI Image Generation",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "post_text",
+              "value": "={{ $node[\\\"Gemini (Post Text)\\\"].json[\\\"messages\\\"][0][\\\"content\\\"] }}"
+            },
+            {
+              "name": "image_prompt",
+              "value": "={{ $node[\\\"Gemini (Image Prompt)\\\"].json[\\\"messages\\\"][0][\\\"content\\\"] }}"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $node[\\\"OpenAI Image Generation\\\"].json[\\\"data\\\"][0][\\\"url\\\"] }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $node[\\\"Gemini (Post Text)\\\"].json[\\\"platform\\\"] }}"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": false
+        }
+      },
+      "id": "format-platform-content",
+      "name": "Format Platform Content",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        1680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $node[\\\"Format Platform Content\\\"].json }}"
+      },
+      "id": "respond-with-posts",
+      "name": "Respond with Posts",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook (Post Generation)": {
+      "main": [
+        [
+          {
+            "node": "Set Input Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Input Data": {
+      "main": [
+        [
+          {
+            "node": "Split Platforms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Platforms": {
+      "main": [
+        [
+          {
+            "node": "Gemini (Post Text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini (Post Text)": {
+      "main": [
+        [
+          {
+            "node": "Gemini (Image Prompt)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini (Image Prompt)": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Image Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Image Generation": {
+      "main": [
+        [
+          {
+            "node": "Format Platform Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Platform Content": {
+      "main": [
+        [
+          {
+            "node": "Respond with Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}

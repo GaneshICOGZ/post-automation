@@ -1,0 +1,257 @@
+{
+  "name": "AI Content Publishing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "publish",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-publish",
+      "name": "Webhook (Publish)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "platform",
+              "value": "={{ $node[\\\"Webhook (Publish)\\\"].json[\\\"platform\\\"] }}"
+            },
+            {
+              "name": "post_text",
+              "value": "={{ $node[\\\"Webhook (Publish)\\\"].json[\\\"post_text\\\"] }}"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $node[\\\"Webhook (Publish)\\\"].json[\\\"image\\\"] }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $node[\\\"Webhook (Publish)\\\"].json[\\\"user_id\\\"] }}"
+            },
+            {
+              "name": "post_id",
+              "value": "={{ $node[\\\"Webhook (Publish)\\\"].json[\\\"post_id\\\"] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-publish-data",
+      "name": "Set Publish Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "={{ $node[\\\"Set Publish Data\\\"].json[\\\"post_text\\\"] }}",
+        "additionalFields": {
+          "images": [
+            {
+              "url": "={{ $node[\\\"Set Publish Data\\\"].json[\\\"image_url\\\"] }}"
+            }
+          ]
+        }
+      },
+      "id": "twitter-post",
+      "name": "Twitter Post",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 2,
+      "position": [
+        720,
+        150
+      ],
+      "credentials": {
+        "twitterOAuth1Api": {
+          "id": "twitter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/photos",
+        "sendBody": true,
+        "bodyContentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $node[\\\"Set Publish Data\\\"].json[\\\"post_text\\\"] }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $node[\\\"Set Publish Data\\\"].json[\\\"image_url\\\"] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "facebook-post",
+      "name": "Facebook Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        720,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "facebook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "author",
+              "value": "urn:li:person:{{$node[\\\"Set Publish Data\\\"].json[\\\"user_id\\\"]}}"
+            },
+            {
+              "name": "lifecycleState",
+              "value": "PUBLISHED"
+            },
+            {
+              "name": "specificContent",
+              "value": {
+                "com.linkedin.ugc.ShareContent": {
+                  "shareCommentary": {
+                    "text": "={{ $node[\\\"Set Publish Data\\\"].json[\\\"post_text\\\"] }}"
+                  },
+                  "shareMediaCategory": "IMAGE",
+                  "media": [
+                    {
+                      "status": "READY",
+                      "description": {
+                        "text": "Content image"
+                      },
+                      "media": "={{ $node[\\\"Set Publish Data\\\"].json[\\\"image_url\\\"] }}",
+                      "title": {
+                        "text": "AI Generated Content"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "linkedin-post",
+      "name": "LinkedIn Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        720,
+        450
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "linkedin"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \\\"status\\\": \\\"success\\\",\\n  \\\"platform\\\": $node[\\\"Set Publish Data\\\"].json[\\\"platform\\\"],\\n  \\\"post_id\\\": $node[\\\"Set Publish Data\\\"].json[\\\"post_id\\\"],\\n  \\\"user_id\\\": $node[\\\"Set Publish Data\\\"].json[\\\"user_id\\\"]\\n} }}"
+      },
+      "id": "respond-with-success",
+      "name": "Respond with Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook (Publish)": {
+      "main": [
+        [
+          {
+            "node": "Set Publish Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Publish Data": {
+      "main": [
+        [
+          {
+            "node": "Twitter Post",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Facebook Post",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LinkedIn Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twitter Post": {
+      "main": [
+        [
+          {
+            "node": "Respond with Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Post": {
+      "main": [
+        [
+          {
+            "node": "Respond with Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Post": {
+      "main": [
+        [
+          {
+            "node": "Respond with Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}
