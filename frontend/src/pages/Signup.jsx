@@ -1,26 +1,20 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
-import { authAPI } from '../api/api';
+import { registerUser } from '../api/api';
 import Card from '../components/Card';
 import Input from '../components/Input';
-import Textarea from '../components/Textarea';
 import Button from '../components/Button';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: '',
-    brand_info: '',
-    post_style: '',
-    post_focus: ''
+    password: ''
   });
   const [preferences, setPreferences] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -48,15 +42,20 @@ const Signup = () => {
     try {
       const userData = {
         ...formData,
-        preferences: JSON.stringify(preferences)
+        preferences: preferences
       };
 
-      const response = await authAPI.signup(userData);
+      const response = await registerUser(userData);
 
-      // For signup, redirect to login or auto-login
-      navigate('/login');
+      if (response.access_token) {
+        // Registration successful, redirect to login
+        navigate('/login');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Signup failed');
+      console.error('Signup error:', err);
+      setError(err.message || 'Registration failed. Please check your information.');
     } finally {
       setLoading(false);
     }
@@ -64,134 +63,122 @@ const Signup = () => {
 
   const presetPreferences = [
     'technology', 'business', 'marketing', 'social media',
-    'health', 'travel', 'food', 'entertainment'
+    'health', 'travel', 'food', 'entertainment', 'sports', 'lifestyle'
   ];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-100 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-lg w-full">
-        <Card className="shadow-xl">
-          <div className="text-center mb-8">
-            <div className="mx-auto h-12 w-12 bg-green-600 rounded-full flex items-center justify-center mb-4">
-              <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-white to-indigo-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl w-full">
+        <Card className="shadow-2xl border-0 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-8 text-center">
+            <div className="mx-auto h-16 w-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
+              <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
-              Create your account
-            </h2>
-            <p className="text-gray-600">
-              Join the AI Content Platform and start creating amazing content
-            </p>
+            <h2 className="text-3xl font-bold mb-2">Join ContentCraft AI</h2>
+            <p className="text-purple-100">Start your AI-powered content creation journey</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                {error}
-              </div>
-            )}
+          {/* Form */}
+          <div className="p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  <div className="flex items-center">
+                    <svg className="h-5 w-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {error}
+                  </div>
+                </div>
+              )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Personal Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Full Name"
+                  name="name"
+                  type="text"
+                  placeholder="Your full name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                />
+                <Input
+                  label="Email Address"
+                  name="email"
+                  type="email"
+                  placeholder="your.email@example.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
               <Input
-                label="Full Name"
-                name="name"
-                type="text"
-                placeholder="Enter your full name"
-                value={formData.name}
+                label="Password"
+                name="password"
+                type="password"
+                placeholder="Choose a strong password"
+                value={formData.password}
                 onChange={handleChange}
                 required
               />
 
-              <Input
-                label="Email address"
-                name="email"
-                type="email"
-                placeholder="Enter your email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <Input
-              label="Password"
-              name="password"
-              type="password"
-              placeholder="Create a strong password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-            />
-
-            <Textarea
-              label="Brand Information (Optional)"
-              name="brand_info"
-              placeholder="Tell us about your brand or company..."
-              value={formData.brand_info}
-              onChange={handleChange}
-              rows={3}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Writing Style"
-                name="post_style"
-                type="text"
-                placeholder="e.g., professional, casual, friendly"
-                value={formData.post_style}
-                onChange={handleChange}
-              />
-
-              <Input
-                label="Content Focus"
-                name="post_focus"
-                type="text"
-                placeholder="e.g., tech, business, marketing"
-                value={formData.post_focus}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Content Preferences (select multiple)
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {presetPreferences.map(pref => (
-                  <label key={pref} className="flex items-center p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      value={pref}
-                      checked={preferences.includes(pref)}
-                      onChange={handlePreferenceChange}
-                      className="mr-2 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 capitalize">{pref.replace('-', ' ')}</span>
-                  </label>
-                ))}
+              {/* Content Preferences */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  Content Preferences (Select all that interest you)
+                </label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {presetPreferences.map(pref => (
+                    <label key={pref} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-all cursor-pointer">
+                      <input
+                        type="checkbox"
+                        value={pref}
+                        checked={preferences.includes(pref)}
+                        onChange={handlePreferenceChange}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                      />
+                      <span className="text-sm font-medium text-gray-700 capitalize">{pref}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  💡 We'll use your preferences to show you relevant trending topics and content suggestions
+                </p>
               </div>
-            </div>
 
-            <Button
-              type="submit"
-              loading={loading}
-              className="w-full"
-              size="lg"
-              variant="success"
-            >
-              {loading ? 'Creating account...' : 'Create account'}
-            </Button>
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200"
+                size="lg"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Creating Your Account...
+                  </div>
+                ) : (
+                  '🚀 Start Creating Amazing Content'
+                )}
+              </Button>
+            </form>
 
-            <div className="text-center">
+            {/* Login Link */}
+            <div className="mt-6 text-center">
               <span className="text-sm text-gray-600">
                 Already have an account?{' '}
-                <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500 transition-colors">
-                  Sign in here
+                <Link to="/login" className="font-medium text-purple-600 hover:text-purple-500 transition-colors">
+                  Sign in to continue
                 </Link>
               </span>
             </div>
-          </form>
+          </div>
         </Card>
       </div>
     </div>

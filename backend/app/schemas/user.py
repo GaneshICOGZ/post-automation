@@ -5,18 +5,12 @@ from uuid import UUID
 class UserBase(BaseModel):
     name: str
     email: EmailStr
-    brand_info: Optional[str] = None
-    post_style: Optional[str] = None
-    post_focus: Optional[str] = None
     preferences: Optional[List[str]] = None
 
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    brand_info: Optional[str] = None
-    post_style: Optional[str] = None
-    post_focus: Optional[str] = None
     preferences: Optional[List[str]] = None
 
     @validator('password')
@@ -27,18 +21,12 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
-    brand_info: Optional[str] = None
-    post_style: Optional[str] = None
-    post_focus: Optional[str] = None
     preferences: Optional[List[str]] = None
 
 class UserResponse(BaseModel):
     id: UUID
     name: str
     email: EmailStr
-    brand_info: Optional[str] = None
-    post_style: Optional[str] = None
-    post_focus: Optional[str] = None
     preferences: Optional[List[str]] = None
 
     class Config:
@@ -52,9 +40,6 @@ class UserResponse(BaseModel):
             'id': obj.id,
             'name': obj.name,
             'email': obj.email,
-            'brand_info': obj.brand_info,
-            'post_style': obj.post_style,
-            'post_focus': obj.post_focus,
             'preferences': obj.preferences
         }
 

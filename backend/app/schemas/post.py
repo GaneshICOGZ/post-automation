@@ -6,7 +6,6 @@ from datetime import datetime
 # PostSummary schemas
 class PostSummaryBase(BaseModel):
     topic: str
-    description: Optional[str] = None
     summary_text: Optional[str] = None
     summary_approved: Optional[bool] = False
 

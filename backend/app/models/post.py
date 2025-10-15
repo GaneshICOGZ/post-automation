@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Boolean, TIMESTAMP, ForeignKey, UUID
+from sqlalchemy import Column, String, Text, Boolean, TIMESTAMP, ForeignKey
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import relationship
@@ -7,12 +7,11 @@ from ..database import Base
 class PostSummary(Base):
     __tablename__ = "post_summaries"
 
-    # Use UUID for PostgreSQL compatibility
-    id = Column(UUID, primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
+    # Use String for SQLite compatibility (matching User model)
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
 
     topic = Column(Text, nullable=False)
-    description = Column(Text, nullable=True)
     summary_text = Column(Text, nullable=True)
     summary_approved = Column(Boolean, default=False)  # True when approved
 
@@ -26,9 +25,9 @@ class PostSummary(Base):
 class PostPlatform(Base):
     __tablename__ = "post_platforms"
 
-    # Use UUID for PostgreSQL compatibility
-    id = Column(UUID, primary_key=True, default=uuid.uuid4)
-    summary_id = Column(UUID, ForeignKey("post_summaries.id"), nullable=False)
+    # Use String for SQLite compatibility
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    summary_id = Column(String, ForeignKey("post_summaries.id"), nullable=False)
     platform_name = Column(String(50), nullable=False)  # facebook, linkedin, etc
 
     post_text = Column(Text, nullable=True)

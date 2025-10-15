@@ -63,9 +63,6 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
         name=user_data.name,
         email=user_data.email,
         password_hash=hashed_password,
-        brand_info=user_data.brand_info,
-        post_style=user_data.post_style,
-        post_focus=user_data.post_focus,
         preferences=preferences_json
     )
     db.add(user)
@@ -75,8 +72,17 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     return user
 
 @router.post("/login")
-async def login(email: str, password: str, db: Session = Depends(get_db)):
+async def login(request_data: dict, db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
+    email = request_data.get("email")
+    password = request_data.get("password")
+
+    if not email or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Email and password are required"
+        )
+
     # Find user by email
     user = db.query(User).filter(User.email == email).first()
     if not user:

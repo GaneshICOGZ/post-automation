@@ -16,28 +16,22 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    # Create users table with UUID type for PostgreSQL
+    # Create users table - Simplified schema
     op.create_table('users',
-        sa.Column('id', postgresql.UUID(), nullable=False),
+        sa.Column('id', sa.String(), nullable=False),
         sa.Column('name', sa.String(), nullable=False),
         sa.Column('email', sa.String(), nullable=False),
         sa.Column('password_hash', sa.String(), nullable=False),
-        sa.Column('brand_info', sa.Text(), nullable=True),
-        sa.Column('post_style', sa.Text(), nullable=True),
-        sa.Column('post_focus', sa.Text(), nullable=True),
         sa.Column('preferences', sa.Text(), nullable=False),
-        sa.Column('created_at', sa.TIMESTAMP(), nullable=True),
-        sa.Column('updated_at', sa.TIMESTAMP(), nullable=True),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('email')
     )
 
-    # Create post_summaries table (new architecture)
+    # Create post_summaries table (main content table)
     op.create_table('post_summaries',
-        sa.Column('id', postgresql.UUID(), nullable=False),
-        sa.Column('user_id', postgresql.UUID(), nullable=False),
+        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('user_id', sa.String(), nullable=False),
         sa.Column('topic', sa.Text(), nullable=False),
-        sa.Column('description', sa.Text(), nullable=True),
         sa.Column('summary_text', sa.Text(), nullable=True),
         sa.Column('summary_approved', sa.Boolean(), nullable=True),
         sa.Column('created_at', sa.TIMESTAMP(), nullable=True),
@@ -46,10 +40,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
 
-    # Create post_platforms table (new architecture)
+    # Create post_platforms table (platform-specific content)
     op.create_table('post_platforms',
-        sa.Column('id', postgresql.UUID(), nullable=False),
-        sa.Column('summary_id', postgresql.UUID(), nullable=False),
+        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('summary_id', sa.String(), nullable=False),
         sa.Column('platform_name', sa.String(50), nullable=False),
         sa.Column('post_text', sa.Text(), nullable=True),
         sa.Column('image_url', sa.Text(), nullable=True),

@@ -31,25 +31,20 @@ async def generate_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Generate AI summary via n8n without saving to database."""
+    """Generate AI summary via n8n and save to database."""
     # Trigger n8n workflow for summary generation
     n8n_payload = {
         "user_id": str(current_user.id),
         "topic": summary_data.topic,
-        "description": summary_data.description or "",
-        "user_style": current_user.post_style or "",
-        "user_focus": current_user.post_focus or "",
-        "brand_info": current_user.brand_info or ""
+        "user_name": current_user.name or "",
+        "user_preferences": current_user.preferences or []
     }
+
     try:
         n8n_url = f"{N8N_BASE_URL}{N8N_SUMMARY_WEBHOOK}"
-
-
         response = requests.post(n8n_url, json=n8n_payload)
 
-
         if response.status_code != 200:
-
             raise HTTPException(
                 status_code=500,
                 detail=f"n8n summary generation failed: {response.status_code}"
@@ -58,11 +53,25 @@ async def generate_summary(
         # Get the generated summary from n8n response
         summary_text = response.json().get("summary", "")
 
+        # Save summary to database immediately
+        post_summary = PostSummary(
+            user_id=current_user.id,
+            topic=summary_data.topic,
+            summary_text=summary_text,
+            summary_approved=False  # Not approved yet
+        )
+
+        db.add(post_summary)
+        db.commit()
+        db.refresh(post_summary)
+
         return {
+            "summary_id": str(post_summary.id),
             "topic": summary_data.topic,
-            "description": summary_data.description,
             "summary_text": summary_text,
-            "generated": True
+            "summary_approved": False,
+            "generated": True,
+            "message": "Summary generated and saved to database"
         }
 
     except requests.RequestException as e:
@@ -74,28 +83,40 @@ async def generate_summary(
 
 @router.post("/approve-summary")
 async def approve_summary(
-    summary_data: dict,  # { topic, description, summary_text }
+    request_data: dict,  # { summary_id }
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Approve and save the AI-generated summary to database."""
-    # Create new post summary record with approved content
-    post_summary = PostSummary(
-        user_id=current_user.id,
-        topic=summary_data.get("topic"),
-        description=summary_data.get("description"),
-        summary_text=summary_data.get("summary_text"),
-        summary_approved=True
-    )
+    """Approve an existing AI-generated summary in database."""
+    summary_id = request_data.get("summary_id")
 
-    db.add(post_summary)
+    if not summary_id:
+        raise HTTPException(status_code=400, detail="summary_id is required")
+
+    # Find existing summary
+    post_summary = db.query(PostSummary).filter(
+        PostSummary.id == summary_id,
+        PostSummary.user_id == current_user.id
+    ).first()
+
+    if not post_summary:
+        raise HTTPException(status_code=404, detail="Post summary not found")
+
+    if not post_summary.summary_text:
+        raise HTTPException(status_code=400, detail="No summary text available to approve")
+
+    # Update approval status
+    post_summary.summary_approved = True
+    post_summary.updated_at = datetime.utcnow()
+
     db.commit()
     db.refresh(post_summary)
 
     return {
-        "message": "Summary approved and saved",
+        "message": "Summary approved successfully",
         "summary_id": str(post_summary.id),
-        "summary": post_summary
+        "summary": post_summary,
+        "approved": True
     }
 
 @router.post("/generate-content")
@@ -134,14 +155,11 @@ async def generate_platform_content(
         "user_id": str(current_user.id),
         "summary_id": str(summary_id),
         "topic": post_summary.topic,
-        "description": post_summary.description or "",
         "summary_text": post_summary.summary_text,
         "platforms": platforms,
-        "user_style": current_user.post_style or "",
-        "user_focus": current_user.post_focus or "",
-        "brand_info": current_user.brand_info or ""
+        "user_name": current_user.name or "",
+        "user_preferences": current_user.preferences or []
     }
-    print(n8n_payload)
 
     try:
         n8n_url = f"{N8N_BASE_URL}{N8N_POSTGEN_WEBHOOK}"
@@ -153,13 +171,62 @@ async def generate_platform_content(
                 detail=f"n8n post generation failed: {response.status_code}"
             )
 
-        # Get the generated platform content from n8n response
-        platform_data = response.json().get("platforms", [])
+        # Parse n8n response and create platform records
+        n8n_response = response.json()
+        platforms_list = n8n_response.get("Platforms", [])
+        image_url = n8n_response.get("image url", "")
+
+        # Create platform records for each platform
+        created_platforms = []
+        for platform_name in platforms_list:
+            # Map platform names to proper format
+            platform_map = {
+                "x": "twitter",
+                "facebook": "facebook",
+                "linkedin": "linkedin",
+                "instagram": "instagram",
+                "youtube": "youtube"
+            }
+
+            clean_platform_name = platform_map.get(platform_name.lower(), platform_name.lower())
+
+            # Get platform-specific content
+            content_key = f"{clean_platform_name.title()} Post"
+            if clean_platform_name == "twitter":
+                content_key = "X Post"
+            elif clean_platform_name == "facebook":
+                content_key = "facebook Caption"
+            elif clean_platform_name == "instagram":
+                content_key = "Instagram Caption"
+            elif clean_platform_name == "linkedin":
+                content_key = "LinkedIn Post"
+            elif clean_platform_name == "youtube":
+                content_key = "youtube Caption"
+
+            post_content = n8n_response.get(content_key, "")
+
+            # Create platform record in database
+            platform_record = PostPlatform(
+                summary_id=summary_id,
+                platform_name=clean_platform_name,
+                post_text=post_content,
+                image_url=image_url
+            )
+            db.add(platform_record)
+            db.commit()
+            created_platforms.append({
+                "platform_id": str(platform_record.id),
+                "platform_name": clean_platform_name,
+                "post_text": post_content,
+                "image_url": image_url
+            })
+
 
         return {
             "summary_id": summary_id,
-            "platforms": platform_data,
-            "generated": True
+            "platforms": created_platforms,
+            "generated": True,
+            "message": f"Generated content for {len(created_platforms)} platforms"
         }
 
     except requests.RequestException as e:
@@ -426,6 +493,366 @@ async def get_user_posts_history(
         })
 
     return result
+
+@router.post("/regenerate-text")
+async def regenerate_text(
+    request_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Regenerate text content with user suggestions via n8n/Gemini."""
+    summary_id = request_data.get("summary_id")
+    platform_id = request_data.get("platform_id")
+    user_suggestions = request_data.get("suggestions", "")
+    content_type = request_data.get("content_type", "summary")  # "summary" or "post"
+
+    if not summary_id:
+        raise HTTPException(status_code=400, detail="summary_id is required")
+
+    # Verify summary exists and belongs to user
+    post_summary = db.query(PostSummary).filter(
+        PostSummary.id == summary_id,
+        PostSummary.user_id == current_user.id
+    ).first()
+
+    if not post_summary:
+        raise HTTPException(status_code=404, detail="Post summary not found")
+
+    # Handle different content types
+    if content_type == "summary":
+        # Regenerate summary text
+        existing_content = post_summary.summary_text or ""
+        if not existing_content:
+            raise HTTPException(
+                status_code=400,
+                detail="No summary text available to regenerate. Generate summary first."
+            )
+
+        context = f"Topic: {post_summary.topic}\nCurrent summary: {existing_content}"
+
+        # Trigger n8n workflow for summary regeneration
+        n8n_payload = {
+            "user_id": str(current_user.id),
+            "summary_id": str(summary_id),
+            "content_type": "summary",
+            "existing_content": existing_content,
+            "user_suggestions": user_suggestions,
+            "context": context,
+            "user_name": current_user.name or "",
+            "user_preferences": current_user.preferences or []
+        }
+
+        try:
+            n8n_url = f"{N8N_BASE_URL}{N8N_SUMMARY_WEBHOOK}"
+            response = requests.post(n8n_url, json=n8n_payload, timeout=60)
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"n8n summary regeneration failed: {response.status_code}"
+                )
+
+            # Get the regenerated summary from n8n response
+            regenerated_content = response.json().get("summary", "")
+
+            return {
+                "summary_id": summary_id,
+                "content_type": "summary",
+                "original_content": existing_content,
+                "regenerated_content": regenerated_content,
+                "user_suggestions": user_suggestions,
+                "success": True,
+                "message": "Summary text regenerated successfully"
+            }
+
+        except requests.RequestException as e:
+            raise HTTPException(status_code=500, detail=f"Error calling n8n: {str(e)}")
+
+    elif content_type == "post":
+        # Regenerate platform-specific post text
+        if not platform_id:
+            raise HTTPException(status_code=400, detail="platform_id is required for post regeneration")
+
+        platform_post = db.query(PostPlatform).filter(
+            PostPlatform.id == platform_id,
+            PostPlatform.summary_id == summary_id
+        ).first()
+
+        if not platform_post:
+            raise HTTPException(status_code=404, detail="Platform post not found")
+
+        existing_content = platform_post.post_text or ""
+        if not existing_content:
+            raise HTTPException(
+                status_code=400,
+                detail="No post content available to regenerate. Generate content first."
+            )
+
+        context = f"Platform: {platform_post.platform_name}\nSummary: {post_summary.summary_text}\nCurrent post: {existing_content}"
+
+        # Trigger n8n workflow for post regeneration
+        n8n_payload = {
+            "user_id": str(current_user.id),
+            "summary_id": str(summary_id),
+            "platform_id": str(platform_id),
+            "content_type": "post",
+            "existing_content": existing_content,
+            "user_suggestions": user_suggestions,
+            "context": context,
+            "platform_name": platform_post.platform_name,
+            "user_name": current_user.name or "",
+            "user_preferences": current_user.preferences or []
+        }
+
+        try:
+            n8n_url = f"{N8N_BASE_URL}{N8N_POSTGEN_WEBHOOK}"
+            response = requests.post(n8n_url, json=n8n_payload, timeout=60)
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"n8n post regeneration failed: {response.status_code}"
+                )
+
+            # Get the regenerated post content from n8n response
+            regenerated_content = response.json().get("regenerated_content", "")
+
+            return {
+                "summary_id": summary_id,
+                "platform_id": platform_id,
+                "content_type": "post",
+                "platform_name": platform_post.platform_name,
+                "original_content": existing_content,
+                "regenerated_content": regenerated_content,
+                "user_suggestions": user_suggestions,
+                "success": True,
+                "message": f"Post text regenerated successfully for {platform_post.platform_name}"
+            }
+
+        except requests.RequestException as e:
+            raise HTTPException(status_code=500, detail=f"Error calling n8n: {str(e)}")
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="content_type must be either 'summary' or 'post'"
+        )
+
+@router.post("/regenerate-image")
+async def regenerate_image(
+    request_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Regenerate image content with user suggestions via n8n/Gemini."""
+    summary_id = request_data.get("summary_id")
+    user_suggestions = request_data.get("suggestions", "")
+
+    if not summary_id:
+        raise HTTPException(status_code=400, detail="summary_id is required")
+
+    # Verify summary exists and belongs to user
+    post_summary = db.query(PostSummary).filter(
+        PostSummary.id == summary_id,
+        PostSummary.user_id == current_user.id
+    ).first()
+
+    if not post_summary:
+        raise HTTPException(status_code=404, detail="Post summary not found")
+
+    if not post_summary.summary_text:
+        raise HTTPException(status_code=400, detail="No summary text available for image generation")
+
+    # Get all platform content for this summary
+    platforms = db.query(PostPlatform).filter(
+        PostPlatform.summary_id == summary_id
+    ).all()
+
+    # Build comprehensive context with summary and all platform content
+    summary_content = f"Topic: {post_summary.topic}\nSummary: {post_summary.summary_text}"
+
+    platform_contents = []
+    for platform in platforms:
+        if platform.post_text:
+            platform_contents.append(f"{platform.platform_name}: {platform.post_text}")
+
+    all_content = summary_content + "\n\nPlatform Content:\n" + "\n".join(platform_contents) if platform_contents else summary_content
+
+    # Trigger n8n workflow for image regeneration with full context
+    n8n_payload = {
+        "user_id": str(current_user.id),
+        "summary_id": str(summary_id),
+        "summary_content": post_summary.summary_text,
+        "topic": post_summary.topic,
+        # Removed description field
+        "all_content": all_content,
+        "platform_contents": platform_contents,
+        "user_suggestions": user_suggestions,
+        "regenerate_type": "image",
+        "user_name": current_user.name or "",
+        "user_preferences": current_user.preferences or []
+    }
+
+    try:
+        n8n_url = f"{N8N_BASE_URL}{N8N_POSTGEN_WEBHOOK}"
+        response = requests.post(n8n_url, json=n8n_payload, timeout=60)
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=500,
+                detail=f"n8n image regeneration failed: {response.status_code}"
+            )
+
+        # Get the regenerated image URL from n8n response
+        regenerated_image_url = response.json().get("regenerated_image_url", "")
+
+        if not regenerated_image_url:
+            raise HTTPException(status_code=500, detail="No image URL returned from n8n")
+
+        # Update image URL for all platforms associated with this summary
+        updated_count = 0
+        for platform in platforms:
+            platform.image_url = regenerated_image_url
+            platform.updated_at = datetime.utcnow()
+            updated_count += 1
+
+        db.commit()
+
+        return {
+            "summary_id": summary_id,
+            "regenerated_image_url": regenerated_image_url,
+            "updated_platforms": len(platforms),
+            "user_suggestions": user_suggestions,
+            "context_used": {
+                "summary": post_summary.summary_text[:100] + "...",
+                "platforms": len(platforms),
+                "all_content_length": len(all_content)
+            },
+            "success": True,
+            "message": f"Image regenerated and updated for {updated_count} platforms successfully"
+        }
+
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Error calling n8n: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+@router.post("/update-content")
+async def update_content(
+    request_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update existing content with regenerated text or image."""
+    summary_id = request_data.get("summary_id")
+    platform_id = request_data.get("platform_id")
+    content_type = request_data.get("content_type", "post")  # "summary" or "post"
+    new_content = request_data.get("new_content", "")
+    new_image_url = request_data.get("new_image_url", "")
+
+    if not summary_id:
+        raise HTTPException(status_code=400, detail="summary_id is required")
+
+    # Verify summary exists and belongs to user
+    post_summary = db.query(PostSummary).filter(
+        PostSummary.id == summary_id,
+        PostSummary.user_id == current_user.id
+    ).first()
+
+    if not post_summary:
+        raise HTTPException(status_code=404, detail="Post summary not found")
+
+    if content_type == "summary":
+        # Update summary text
+        post_summary.summary_text = new_content
+        post_summary.updated_at = datetime.utcnow()
+
+        message = "Summary text updated successfully"
+    else:
+        # Update platform-specific content
+        if not platform_id:
+            raise HTTPException(status_code=400, detail="platform_id is required for post content update")
+
+        platform_post = db.query(PostPlatform).filter(
+            PostPlatform.id == platform_id,
+            PostPlatform.summary_id == summary_id
+        ).first()
+
+        if not platform_post:
+            raise HTTPException(status_code=404, detail="Platform post not found")
+
+        # Update content and/or image
+        if new_content:
+            platform_post.post_text = new_content
+        if new_image_url:
+            platform_post.image_url = new_image_url
+
+        platform_post.updated_at = datetime.utcnow()
+        message = f"Post content updated for {platform_post.platform_name}"
+
+    db.commit()
+
+    return {
+        "summary_id": summary_id,
+        "platform_id": platform_id,
+        "content_type": content_type,
+        "updated": True,
+        "message": message
+    }
+
+@router.post("/update-image")
+async def update_image_for_all_platforms(
+    request_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update image URL for all platforms associated with a summary."""
+    summary_id = request_data.get("summary_id")
+    image_url = request_data.get("image_url")
+
+    if not summary_id:
+        raise HTTPException(status_code=400, detail="summary_id is required")
+
+    if not image_url:
+        raise HTTPException(status_code=400, detail="image_url is required")
+
+    # Verify summary exists and belongs to user
+    post_summary = db.query(PostSummary).filter(
+        PostSummary.id == summary_id,
+        PostSummary.user_id == current_user.id
+    ).first()
+
+    if not post_summary:
+        raise HTTPException(status_code=404, detail="Post summary not found")
+
+    # Find all platforms for this summary
+    platforms = db.query(PostPlatform).filter(
+        PostPlatform.summary_id == summary_id
+    ).all()
+
+    if not platforms:
+        raise HTTPException(status_code=404, detail="No platforms found for this summary")
+
+    # Update image URL for all platforms
+    updated_platforms = []
+    for platform in platforms:
+        platform.image_url = image_url
+        platform.updated_at = datetime.utcnow()
+        updated_platforms.append({
+            "platform_id": str(platform.id),
+            "platform_name": platform.platform_name,
+            "image_url": image_url
+        })
+
+    db.commit()
+
+    return {
+        "summary_id": summary_id,
+        "image_url": image_url,
+        "updated_platforms": updated_platforms,
+        "message": f"Image updated for {len(updated_platforms)} platforms",
+        "success": True
+    }
 
 @router.get("/summary/{summary_id}", response_model=PostWithPlatformsResponse)
 async def get_post_with_platforms(
