@@ -23,6 +23,8 @@ router = APIRouter()
 N8N_BASE_URL = os.getenv("N8N_BASE_URL", "https://ganeshicogz.app.n8n.cloud")
 N8N_SUMMARY_WEBHOOK = os.getenv("N8N_SUMMARY_WEBHOOK", "/webhook/summary")
 N8N_POSTGEN_WEBHOOK = os.getenv("N8N_POSTGEN_WEBHOOK", "/webhook/generate-posts")
+N8N_REGENERATE_WEBHOOK = os.getenv("N8N_REGENERATE_WEBHOOK", "/webhook/regenerate-text")
+N8N_REGENERATE_IMAGE_WEBHOOK = os.getenv("N8N_REGENERATE_IMAGE_WEBHOOK", "/webhook/regenerate-image")
 N8N_PUBLISH_WEBHOOK = os.getenv("N8N_PUBLISH_WEBHOOK", "/webhook/publish")
 
 @router.post("/generate-summary")
@@ -64,7 +66,7 @@ async def generate_summary(
         db.add(post_summary)
         db.commit()
         db.refresh(post_summary)
-
+        
         return {
             "summary_id": str(post_summary.id),
             "topic": summary_data.topic,
@@ -83,12 +85,13 @@ async def generate_summary(
 
 @router.post("/approve-summary")
 async def approve_summary(
-    request_data: dict,  # { summary_id }
+    request_data: dict,  # { summary_id, summary_text }
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Approve an existing AI-generated summary in database."""
+    """Approve an existing AI-generated summary in database and update summary text if edited."""
     summary_id = request_data.get("summary_id")
+    summary_text = request_data.get("summary_text")  # Allow updating summary text
 
     if not summary_id:
         raise HTTPException(status_code=400, detail="summary_id is required")
@@ -102,8 +105,9 @@ async def approve_summary(
     if not post_summary:
         raise HTTPException(status_code=404, detail="Post summary not found")
 
-    if not post_summary.summary_text:
-        raise HTTPException(status_code=400, detail="No summary text available to approve")
+    # Update summary text if provided (user edited it)
+    if summary_text is not None:
+        post_summary.summary_text = summary_text
 
     # Update approval status
     post_summary.summary_approved = True
@@ -113,10 +117,11 @@ async def approve_summary(
     db.refresh(post_summary)
 
     return {
-        "message": "Summary approved successfully",
+        "message": "Summary approved and updated successfully",
         "summary_id": str(post_summary.id),
         "summary": post_summary,
-        "approved": True
+        "approved": True,
+        "updated": summary_text is not None
     }
 
 @router.post("/generate-content")
@@ -506,8 +511,24 @@ async def regenerate_text(
     user_suggestions = request_data.get("suggestions", "")
     content_type = request_data.get("content_type", "summary")  # "summary" or "post"
 
-    if not summary_id:
-        raise HTTPException(status_code=400, detail="summary_id is required")
+    # Extract summary_id either directly or from platform_id
+    if not summary_id and not platform_id:
+        raise HTTPException(status_code=400, detail="Either summary_id or platform_id is required")
+
+    if content_type == "summary" and platform_id and not summary_id:
+        raise HTTPException(status_code=400, detail="platform_id cannot be used for summary text regeneration")
+
+    if platform_id and not summary_id:
+        # Extract summary_id from platform record
+        platform_record = db.query(PostPlatform).filter(
+            PostPlatform.id == platform_id,
+            PostPlatform.summary.has(user_id=current_user.id)  # Ensure user owns the summary
+        ).first()
+
+        if not platform_record:
+            raise HTTPException(status_code=404, detail="Platform post not found")
+
+        summary_id = str(platform_record.summary_id)
 
     # Verify summary exists and belongs to user
     post_summary = db.query(PostSummary).filter(
@@ -543,7 +564,7 @@ async def regenerate_text(
         }
 
         try:
-            n8n_url = f"{N8N_BASE_URL}{N8N_SUMMARY_WEBHOOK}"
+            n8n_url = f"{N8N_BASE_URL}{N8N_REGENERATE_WEBHOOK}"
             response = requests.post(n8n_url, json=n8n_payload, timeout=60)
 
             if response.status_code != 200:
@@ -555,6 +576,11 @@ async def regenerate_text(
             # Get the regenerated summary from n8n response
             regenerated_content = response.json().get("summary", "")
 
+            # Update the summary in database immediately
+            post_summary.summary_text = regenerated_content
+            post_summary.updated_at = datetime.utcnow()
+            db.commit()
+
             return {
                 "summary_id": summary_id,
                 "content_type": "summary",
@@ -562,7 +588,7 @@ async def regenerate_text(
                 "regenerated_content": regenerated_content,
                 "user_suggestions": user_suggestions,
                 "success": True,
-                "message": "Summary text regenerated successfully"
+                "message": "Summary text regenerated and updated successfully"
             }
 
         except requests.RequestException as e:
@@ -605,7 +631,7 @@ async def regenerate_text(
         }
 
         try:
-            n8n_url = f"{N8N_BASE_URL}{N8N_POSTGEN_WEBHOOK}"
+            n8n_url = f"{N8N_BASE_URL}{N8N_REGENERATE_WEBHOOK}"
             response = requests.post(n8n_url, json=n8n_payload, timeout=60)
 
             if response.status_code != 200:
@@ -615,7 +641,12 @@ async def regenerate_text(
                 )
 
             # Get the regenerated post content from n8n response
-            regenerated_content = response.json().get("regenerated_content", "")
+            regenerated_content = response.json().get("output", "")
+
+            # Update the platform post in database immediately
+            platform_post.post_text = regenerated_content
+            platform_post.updated_at = datetime.utcnow()
+            db.commit()
 
             return {
                 "summary_id": summary_id,
@@ -626,7 +657,7 @@ async def regenerate_text(
                 "regenerated_content": regenerated_content,
                 "user_suggestions": user_suggestions,
                 "success": True,
-                "message": f"Post text regenerated successfully for {platform_post.platform_name}"
+                "message": f"Post text regenerated and updated successfully for {platform_post.platform_name}"
             }
 
         except requests.RequestException as e:
@@ -646,10 +677,27 @@ async def regenerate_image(
 ):
     """Regenerate image content with user suggestions via n8n/Gemini."""
     summary_id = request_data.get("summary_id")
+    platform_id = request_data.get("platform_id")
     user_suggestions = request_data.get("suggestions", "")
 
-    if not summary_id:
-        raise HTTPException(status_code=400, detail="summary_id is required")
+    # Extract summary_id either directly or from platform_id
+    if not summary_id and not platform_id:
+        raise HTTPException(status_code=400, detail="Either summary_id or platform_id is required")
+
+    if summary_id and platform_id:
+        raise HTTPException(status_code=400, detail="Provide either summary_id OR platform_id, not both")
+
+    if platform_id and not summary_id:
+        # Extract summary_id from platform record
+        platform_record = db.query(PostPlatform).filter(
+            PostPlatform.id == platform_id,
+            PostPlatform.summary.has(user_id=current_user.id)  # Ensure user owns the summary
+        ).first()
+
+        if not platform_record:
+            raise HTTPException(status_code=404, detail="Platform post not found")
+
+        summary_id = str(platform_record.summary_id)
 
     # Verify summary exists and belongs to user
     post_summary = db.query(PostSummary).filter(
@@ -694,7 +742,7 @@ async def regenerate_image(
     }
 
     try:
-        n8n_url = f"{N8N_BASE_URL}{N8N_POSTGEN_WEBHOOK}"
+        n8n_url = f"{N8N_BASE_URL}{N8N_REGENERATE_IMAGE_WEBHOOK}"
         response = requests.post(n8n_url, json=n8n_payload, timeout=60)
 
         if response.status_code != 200:
@@ -704,7 +752,7 @@ async def regenerate_image(
             )
 
         # Get the regenerated image URL from n8n response
-        regenerated_image_url = response.json().get("regenerated_image_url", "")
+        regenerated_image_url = response.json().get("image url", "")
 
         if not regenerated_image_url:
             raise HTTPException(status_code=500, detail="No image URL returned from n8n")

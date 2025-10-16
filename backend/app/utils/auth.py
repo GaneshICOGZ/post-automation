@@ -12,7 +12,8 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-256-bit-secret-key-here")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Increased token lifetime to 28 days (40320 minutes) for better user experience
+ACCESS_TOKEN_EXPIRE_MINUTES = 40320  # 28 days * 24 hours * 60 minutes
 
 # Use scrypt instead of bcrypt to avoid the 72-byte limitation and bug detection issues
 pwd_context = CryptContext(schemes=["scrypt"], deprecated="auto")

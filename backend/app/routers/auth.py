@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from sqlalchemy.orm import Session
 from typing import Optional
+from pydantic import BaseModel
 from ..database import get_db
 from ..schemas import UserCreate, UserResponse
 from ..models import User
@@ -8,6 +9,10 @@ from ..utils.auth import get_password_hash, verify_password, create_access_token
 from ..utils.dependencies import get_current_user
 
 router = APIRouter()
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 def get_current_user_id_from_token(authorization: Optional[str] = Header(None)) -> str:
     """Extract user ID from JWT token in Authorization header."""
@@ -72,10 +77,10 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     return user
 
 @router.post("/login")
-async def login(request_data: dict, db: Session = Depends(get_db)):
+async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
-    email = request_data.get("email")
-    password = request_data.get("password")
+    email = credentials.email
+    password = credentials.password
 
     if not email or not password:
         raise HTTPException(
