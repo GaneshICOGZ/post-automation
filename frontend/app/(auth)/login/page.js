@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../../src/context/AuthContextNext';
-import Button from '../../src/components/Button';
-import Card from '../../src/components/Card';
-import { authApi } from '../../src/api/api';
+import { useAuth } from '../../../src/context/AuthContext';
+import Button from '../../../src/components/Button';
+import Card from '../../../src/components/Card';
+import Input from '../../../src/components/Input';
 
 const LoginPage = () => {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
@@ -31,49 +33,20 @@ const LoginPage = () => {
     setError('');
 
     try {
-      let response;
       if (isLogin) {
-        // Use direct API call for login
-        const res = await fetch('http://localhost:8000/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password
-          }),
-        });
-
-        response = await res.json();
-
-        if (res.ok && response.access_token) {
-          login({ email: formData.email }, response.access_token);
+        const result = await login(formData.email, formData.password);
+        if (result.success) {
           router.push('/dashboard');
         } else {
-          throw new Error(response.detail || 'Login failed');
+          setError(result.error);
         }
       } else {
-        // Use direct API call for signup
-        const res = await fetch('http://localhost:8000/auth/signup', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            preferences: []
-          }),
-        });
-
-        response = await res.json();
-
-        if (res.ok) {
-          router.push('/'); // Go to login after successful signup
+        const result = await register(formData.name, formData.email, formData.password);
+        if (result.success) {
+          // Auto-login after registration
+          router.push('/dashboard');
         } else {
-          throw new Error(response.detail || 'Registration failed');
+          setError(result.error);
         }
       }
     } catch (error) {
@@ -84,19 +57,25 @@ const LoginPage = () => {
     }
   };
 
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="min-h-screen flex items-center justify-center p-4 gradient-bg">
       {/* Animated Background Orbs */}
-      <div className="absolute top-0 -left-4 w-72 h-72 bg-blue-400/15 bgorb delay-1000"></div>
-      <div className="absolute top-0 -right-4 w-72 h-72 bg-purple-400/15 bgorb"></div>
-      <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-400/8 bgorb delay-500"></div>
+      <div className="absolute inset-0 flex items-center justify-center dark:opacity-30">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/15 rounded-full blur-3xl animate-pulse-slow"></div>
+        <div className="absolute bottom-32 right-10 w-96 h-96 bg-accent/15 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-40 right-1/4 w-64 h-64 bg-secondary/15 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '0.5s' }}></div>
+      </div>
 
       {/* Header */}
-      <div className="fixed top-6 left-6 flex items-center gap-2">
-        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">PA</span>
+      <div className="fixed top-6 left-6 flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => router.push('/')}>
+        <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-lg flex items-center justify-center">
+          <svg className="w-5 h-5 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h12a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm2 2a1 1 0 100 2h2a1 1 0 100-2H5z" clipRule="evenodd" />
+          </svg>
         </div>
-        <span className="text-xl font-bold text-gray-900 dark:text-white font-headline">
+        <span className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent font-pt-sans">
           Post Automation
         </span>
       </div>
@@ -112,94 +91,78 @@ const LoginPage = () => {
 
       {/* Main Form */}
       <div className="w-full max-w-md z-10">
-        <Card glassmorphism>
-          {/* Tabs */}
-          <div className="flex w-full mb-6">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-2 px-4 text-center rounded-lg transition-all duration-300 ${
-                isLogin
-                  ? 'bg-blue-500 text-white shadow-lg'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-2 px-4 text-center rounded-lg transition-all duration-300 ${
-                !isLogin
-                  ? 'bg-blue-500 text-white shadow-lg'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              Sign Up
-            </button>
+        <Card glass padding="xl" className="relative overflow-hidden">
+          {/* Sliding tab indicator */}
+          <div className="relative mb-8">
+            <div className="flex w-full bg-secondary/50 rounded-lg p-1">
+              <button
+                onClick={() => setIsLogin(true)}
+                className={`flex-1 py-2.5 px-4 text-center font-semibold rounded-md transition-all duration-300 ${
+                  isLogin
+                    ? 'bg-primary text-primary-foreground shadow-md transform scale-[0.98]'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => setIsLogin(false)}
+                className={`flex-1 py-2.5 px-4 text-center font-semibold rounded-md transition-all duration-300 ${
+                  !isLogin
+                    ? 'bg-primary text-primary-foreground shadow-md transform scale-[0.98]'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-center mb-2 font-headline text-gray-900 dark:text-white">
+          <h1 className={`text-3xl md:text-4xl font-bold text-center mb-2 font-playfair`}>
             {isLogin ? 'Welcome Back' : 'Create Account'}
           </h1>
-          <p className="text-base sm:text-lg text-center text-gray-600 dark:text-gray-300 mb-8 font-body">
+          <p className="text-base md:text-lg text-center text-muted-foreground mb-8">
             {isLogin
               ? 'Sign in to continue your automation journey'
               : 'Join us and automate your social media presence'
             }
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
-              <div>
-                <label htmlFor="name" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required={!isLogin}
-                  className="w-full px-4 py-3 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors duration-300"
-                  placeholder="Enter your full name"
-                />
-              </div>
+              <Input
+                type="text"
+                name="name"
+                label="Full Name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="Enter your full name"
+                required={!isLogin}
+              />
             )}
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors duration-300"
-                placeholder="Enter your email"
-              />
-            </div>
+            <Input
+              type="email"
+              name="email"
+              label="Email Address"
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="Enter your email"
+              required
+            />
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors duration-300"
-                placeholder="Enter your password"
-              />
-            </div>
+            <Input
+              type="password"
+              name="password"
+              label="Password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="Enter your password"
+              required
+            />
 
             {error && (
-              <div className="text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+              <div className="text-error text-sm text-center bg-error/10 border border-error/20 p-3 rounded-lg animate-fade-in">
                 {error}
               </div>
             )}
@@ -207,23 +170,25 @@ const LoginPage = () => {
             <Button
               type="submit"
               loading={loading}
-              className="w-full btn-primary"
+              size="lg"
+              className="w-full"
             >
               {isLogin ? 'Sign In' : 'Create Account'}
             </Button>
           </form>
 
           {/* Divider */}
-          <div className="flex items-center my-6">
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-600"></div>
-            <span className="px-3 text-sm text-gray-500 dark:text-gray-400">or</span>
-            <div className="flex-1 border-t border-gray-300 dark:border-gray-600"></div>
+          <div className="flex items-center my-8">
+            <div className="flex-1 h-px bg-border"></div>
+            <span className="px-3 text-sm text-muted-foreground">or</span>
+            <div className="flex-1 h-px bg-border"></div>
           </div>
 
           {/* Guest Access */}
           <Button
             onClick={() => router.push('/dashboard')}
             variant="outline"
+            size="lg"
             className="w-full"
           >
             Continue as Guest

@@ -1,26 +1,156 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light Mode Colors */
+  --background: #FAFAFA;
+  --foreground: #164E63;
+  --primary: #CFFAFE;
+  --primary-foreground: #164E63;
+  --secondary: #F8FAFC;
+  --secondary-foreground: #1E293B;
+  --muted: #F8FAFC;
+  --muted-foreground: #64748B;
+  --accent: #EFF6FF;
+  --accent-foreground: #1E293B;
+  --success: #16A34A;
+  --warning: #0EA5E9;
+  --error: #7C2D12;
+  --info: #059669;
+  --card: #FFFFFF;
+  --card-foreground: #164E63;
+  --popover: #FFFFFF;
+  --popover-foreground: #164E63;
+  --border: #E4E4E7;
+  --input: #E4E4E7;
+  --ring: #CFFAFE;
+  --radius: 0.5rem;
+}
+
+.dark {
+  /* Dark Mode Colors */
+  --background: #2A2A37;
+  --foreground: #F8FAFC;
+  --primary: #0891B2;
+  --primary-foreground: #ECFDF5;
+  --secondary: #374151;
+  --secondary-foreground: #F9FAFB;
+  --muted: #374151;
+  --muted-foreground: #9CA3AF;
+  --accent: #1F2937;
+  --accent-foreground: #F9FAFB;
+  --success: #10B981;
+  --warning: #06B6D4;
+  --error: #EF4444;
+  --info: #0891B2;
+  --card: #111827;
+  --card-foreground: #F9FAFB;
+  --popover: #111827;
+  --popover-foreground: #F9FAFB;
+  --border: #374151;
+  --input: #374151;
+  --ring: #0891B2;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-family-sans: 'PT Sans', sans-serif;
+  --font-family-headline: 'Playfair Display', serif;
+  --font-family-mono: 'Courier New', monospace;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-error: hsl(var(--error));
+  --color-info: hsl(var(--info));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: hsl(var(--border));
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-family-sans);
+  line-height: 1.6;
+}
+
+/* Gradient backgrounds */
+.gradient-bg {
+  background: linear-gradient(135deg, hsl(var(--background)), hsl(var(--primary)/0.1), hsl(var(--accent)));
+}
+
+.dark .gradient-bg {
+  background: linear-gradient(135deg, hsl(var(--background)), hsl(var(--primary)/0.1), hsl(var(--accent)));
+}
+
+/* Glassmorphism effect */
+.glass {
+  backdrop-filter: blur(8px);
+  background: hsla(var(--background), 0.8);
+  border: 1px solid hsla(var(--border), 0.3);
+}
+
+/* Animated gradient orbs */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Grid pattern utility */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--ring));
 }

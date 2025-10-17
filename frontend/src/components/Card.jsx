@@ -3,32 +3,51 @@ import React from 'react';
 const Card = ({
   children,
   className = '',
-  padding = true,
+  onClick,
+  padding = 'default',
   shadow = true,
-  glassmorphism = false,
-  hover = false,
+  glass = false,
+  hoverable = false,
   ...props
 }) => {
-  const baseClasses = 'rounded-2xl border-0';
+  const baseStyles = `
+    bg-card rounded-xl border border-border
+    transition-all duration-300
+  `;
 
-  const paddingClasses = padding ? 'p-6' : '';
+  const shadowStyles = shadow ? 'shadow-lg shadow-border/50' : '';
 
-  const shadowClasses = shadow ? 'shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50' : '';
+  const glassStyles = glass ? `
+    glass backdrop-blur-sm border-white/20
+  ` : '';
 
-  const hoverClasses = hover ? 'hover:shadow-xl hover:shadow-slate-200/50 dark:hover:shadow-slate-900/50 hover:scale-[1.02] transition-all duration-300' : '';
+  const paddingStyles = {
+    none: '',
+    sm: 'p-3',
+    default: 'p-5',
+    lg: 'p-6',
+    xl: 'p-8',
+  };
 
-  const glassClasses = glassmorphism ? 'backdrop-blur-sm bg-white/80 dark:bg-slate-800/80' : 'bg-white dark:bg-slate-900';
+  const hoverStyles = hoverable ? `
+    hover:scale-[1.02] hover:shadow-xl
+    hover:shadow-primary/10 hover:border-primary/30
+  ` : '';
+
+  const clickableStyles = onClick ? 'cursor-pointer' : '';
 
   return (
     <div
       className={`
-        ${baseClasses}
-        ${paddingClasses}
-        ${shadowClasses}
-        ${hoverClasses}
-        ${glassClasses}
+        ${baseStyles}
+        ${shadowStyles}
+        ${glassStyles}
+        ${paddingStyles[padding]}
+        ${hoverStyles}
+        ${clickableStyles}
         ${className}
       `}
+      onClick={onClick}
       {...props}
     >
       {children}
@@ -36,4 +55,23 @@ const Card = ({
   );
 };
 
+const CardHeader = ({ children, className = '' }) => (
+  <div className={`space-y-1.5 pb-4 ${className}`}>
+    {children}
+  </div>
+);
+
+const CardContent = ({ children, className = '' }) => (
+  <div className={`py-2 ${className}`}>
+    {children}
+  </div>
+);
+
+const CardFooter = ({ children, className = '' }) => (
+  <div className={`flex items-center pt-4 ${className}`}>
+    {children}
+  </div>
+);
+
+export { CardHeader, CardContent, CardFooter };
 export default Card;

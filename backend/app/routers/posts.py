@@ -508,9 +508,9 @@ async def regenerate_text(
     """Regenerate text content with user suggestions via n8n/Gemini."""
     summary_id = request_data.get("summary_id")
     platform_id = request_data.get("platform_id")
-    user_suggestions = request_data.get("suggestions", "")
+    user_suggestions = request_data.get("user_suggestions", "")
     content_type = request_data.get("content_type", "summary")  # "summary" or "post"
-
+    
     # Extract summary_id either directly or from platform_id
     if not summary_id and not platform_id:
         raise HTTPException(status_code=400, detail="Either summary_id or platform_id is required")
@@ -678,7 +678,7 @@ async def regenerate_image(
     """Regenerate image content with user suggestions via n8n/Gemini."""
     summary_id = request_data.get("summary_id")
     platform_id = request_data.get("platform_id")
-    user_suggestions = request_data.get("suggestions", "")
+    user_suggestions = request_data.get("user_suggestions", "")
 
     # Extract summary_id either directly or from platform_id
     if not summary_id and not platform_id:

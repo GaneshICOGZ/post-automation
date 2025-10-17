@@ -1,20 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { getTrendingTopics, generateSummary, approveSummary, generateContent, approveContent, publishPost } from '../../api/api';
-import Card from '../../components/Card';
-import Button from '../../components/Button';
-import Input from '../../components/Input';
-import Textarea from '../../components/Textarea';
+'use client';
 
-const CreatePost = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getTrendingTopics, generateSummary, approveSummary, generateContent, approveContent, publishPost } from '../../../src/api/api';
+import Card, { CardHeader, CardContent } from '../../../src/components/Card';
+import Button from '../../../src/components/Button';
+import Input from '../../../src/components/Input';
+import { Textarea } from '../../../src/components/Input';
+import Navbar from '../../../src/components/Navbar';
+
+const CreatePostPage = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Multi-step workflow state
   const [currentStep, setCurrentStep] = useState(1);
 
   // Form data
-  const [topic, setTopic] = useState(location.state?.initialTopic || '');
+  const [topic, setTopic] = useState(searchParams.get('topic') || '');
   const [selectedPlatforms, setSelectedPlatforms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -188,58 +191,62 @@ const CreatePost = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Step Progress */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          {steps.map((step, index) => (
-            <React.Fragment key={step.id}>
-              <div className={`flex flex-col items-center ${
-                step.id <= currentStep ? 'text-blue-600' : 'text-gray-400'
-              }`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
-                  step.id < currentStep
-                    ? 'bg-green-500 text-white'
-                    : step.id === currentStep
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 text-gray-400'
+    <div className="min-h-screen pt-20">
+      <Navbar />
+
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Step Progress */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            {steps.map((step, index) => (
+              <React.Fragment key={step.id}>
+                <div className={`flex flex-col items-center ${
+                  step.id <= currentStep ? 'text-primary' : 'text-muted-foreground'
                 }`}>
-                  {step.id < currentStep ? (
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    step.id
-                  )}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
+                    step.id < currentStep
+                      ? 'bg-success text-white'
+                      : step.id === currentStep
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground'
+                  }`}>
+                    {step.id < currentStep ? (
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      step.id
+                    )}
+                  </div>
+                  <div className="text-xs font-medium text-center max-w-[100px]">
+                    <div className="font-semibold">{step.title}</div>
+                    <div className="text-muted-foreground mt-1">{step.description}</div>
+                  </div>
                 </div>
-                <div className="text-xs font-medium text-center">
-                  <div className="font-semibold">{step.title}</div>
-                  <div className="text-gray-500 mt-1">{step.description}</div>
-                </div>
-              </div>
-              {index < steps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-4 mt-5 ${
-                  step.id < currentStep ? 'bg-green-500' : 'bg-gray-200'
-                }`} />
-              )}
-            </React.Fragment>
-          ))}
+                {index < steps.length - 1 && (
+                  <div className={`flex-1 h-0.5 mt-5 ${
+                    step.id < currentStep ? 'bg-success' : 'bg-border'
+                  }`} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center">
-          <svg className="h-5 w-5 text-red-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {error}
-        </div>
-      )}
+        {/* Error Display */}
+        {error && (
+          <Card className="mb-6 bg-error/5 border-error/20">
+            <CardContent className="flex items-center text-error">
+              <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              {error}
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Step Content */}
-      <Card className="p-8">
-        {/* Step 1: Choose Topic */}
+        {/* Step Content */}
+        <Card padding="xl">
         {currentStep === 1 && (
           <div className="space-y-6">
             <div>
@@ -540,11 +547,10 @@ const CreatePost = () => {
             </div>
           </div>
         )}
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 };
 
-export default function CreatePostPage() {
-  return <CreatePost />;
-}
+export default CreatePostPage;
