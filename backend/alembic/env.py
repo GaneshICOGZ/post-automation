@@ -54,10 +54,12 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
-    # Get database URL from config or use default
-    database_url = config.get_main_option("sqlalchemy.url")
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    database_url = os.getenv("DATABASE_URL")
     if not database_url:
-        database_url = "sqlite:///./ai_content.db"
+        raise ValueError("DATABASE_URL environment variable is not set!")
 
     connectable = create_engine(database_url, poolclass=pool.NullPool)
 

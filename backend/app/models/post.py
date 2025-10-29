@@ -36,6 +36,8 @@ class PostPlatform(Base):
     published = Column(Boolean, default=False)
     published_at = Column(TIMESTAMP, nullable=True)
     error_message = Column(Text, nullable=True)
+    external_post_id = Column(String(255), nullable=True)  # ID from the platform
+    external_post_url = Column(Text, nullable=True)  # URL to the published post
 
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)

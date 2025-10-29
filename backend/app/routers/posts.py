@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from ..database import get_db
+from ..services import BasePostingService
 from ..schemas.post import (
     PostSummaryCreate, PostSummaryResponse, PostSummaryUpdate,
     PostPlatformCreate, PostPlatformResponse, PostPlatformUpdate,
@@ -18,6 +19,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 router = APIRouter()
+
+from pydantic import BaseModel
+
+class PublishRequest(BaseModel):
+    platform_id: str
+
+
+
+
 
 # Get n8n webhook URLs from environment
 N8N_BASE_URL = os.getenv("N8N_BASE_URL", "https://ganeshicogz.app.n8n.cloud")
@@ -210,22 +220,41 @@ async def generate_platform_content(
 
             post_content = n8n_response.get(content_key, "")
 
-            # Create platform record in database
-            platform_record = PostPlatform(
-                summary_id=summary_id,
-                platform_name=clean_platform_name,
-                post_text=post_content,
-                image_url=image_url
-            )
-            db.add(platform_record)
+            # Check if platform record already exists
+            existing_platform = db.query(PostPlatform).filter(
+                PostPlatform.summary_id == summary_id,
+                PostPlatform.platform_name == clean_platform_name
+            ).first()
+
+            if existing_platform:
+                # Update existing record
+                existing_platform.post_text = post_content
+                existing_platform.image_url = image_url
+                existing_platform.updated_at = datetime.utcnow()
+                platform_record = existing_platform
+            else:
+                # Create new platform record
+                platform_record = PostPlatform(
+                    summary_id=summary_id,
+                    platform_name=clean_platform_name,
+                    post_text=post_content,
+                    image_url=image_url
+                )
+                db.add(platform_record)
+                
             db.commit()
+
             created_platforms.append({
                 "platform_id": str(platform_record.id),
                 "platform_name": clean_platform_name,
                 "post_text": post_content,
-                "image_url": image_url
+                "image_url": image_url,
+                "updated": existing_platform is not None
             })
 
+            # Commit after all operations per platform
+
+        db.commit()
 
         return {
             "summary_id": summary_id,
@@ -235,8 +264,10 @@ async def generate_platform_content(
         }
 
     except requests.RequestException as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"Error calling n8n: {str(e)}")
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @router.post("/approve-content")
@@ -247,6 +278,10 @@ async def approve_platform_content(
 ):
     """Approve and save platform-specific post content to database."""
     platform_id = platform_data.get("platform_id")
+    
+    # Validate platform_id
+    if not platform_id or str(platform_id).lower() == "none":
+        raise HTTPException(status_code=400, detail="platform_id is required and must be a valid UUID")
 
     # Check if platform record already exists
     platform_post = db.query(PostPlatform).filter(
@@ -258,7 +293,8 @@ async def approve_platform_content(
         platform_post.post_text = platform_data.get("post_text")
         platform_post.image_url = platform_data.get("image_url")
         platform_post.approved = True
-        platform_post.updated_at = datetime.utcnow()
+        from datetime import datetime, timezone
+        platform_post.updated_at = datetime.now(timezone.utc)
     else:
         # Create new platform record - this shouldn't happen in normal flow
         # but keeping as fallback
@@ -283,11 +319,14 @@ async def approve_platform_content(
 
 @router.post("/publish")
 async def publish_post(
-    platform_id: str,
+    request: PublishRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Publish approved post to platform via n8n."""
+    platform_id = request.platform_id
+    print(platform_id)
+
+    """Publish approved post to platform via direct API calls."""
     platform_post = db.query(PostPlatform).join(PostSummary).filter(
         PostPlatform.id == platform_id,
         PostSummary.user_id == current_user.id
@@ -302,39 +341,72 @@ async def publish_post(
     if not platform_post.post_text:
         raise HTTPException(status_code=400, detail="No post content generated yet")
 
-    # Trigger n8n workflow for publishing
-    n8n_payload = {
-        "user_id": str(current_user.id),
-        "platform_id": str(platform_id),
-        "platform_name": platform_post.platform_name,
-        "post_text": platform_post.post_text,
-        "image_url": platform_post.image_url or "",
-        "summary_text": platform_post.summary.summary_text
-    }
+    # Import platform services
+    from ..services.linkedin_service import LinkedInPostingService
+    from ..services.twitter_service import TwitterPostingService
+    from ..services.facebook_service import FacebookPostingService
+    from ..services.instagram_service import InstagramPostingService
+
+    platform_name = platform_post.platform_name.lower()
 
     try:
-        n8n_url = f"{N8N_BASE_URL}{N8N_PUBLISH_WEBHOOK}"
-        response = requests.post(n8n_url, json=n8n_payload, timeout=60)
-        if response.status_code == 200:
-            # Update publish status on success
-            platform_post.published = True
-            platform_post.published_at = datetime.utcnow()
+        if platform_name == "linkedin":
+            service = LinkedInPostingService()
+            result = await service.post_content(
+                str(current_user.id),
+                platform_post.post_text[:280],
+                platform_post.image_url,
+                db
+            )
+        elif platform_name == "twitter":
+            service = TwitterPostingService()
+            result = await service.post_content(
+                str(current_user.id),
+                platform_post.post_text,
+                platform_post.image_url,
+                db
+            )
+        elif platform_name == "facebook":
+            service = FacebookPostingService()
+            result = await service.post_content(
+                str(current_user.id),
+                platform_post.post_text,
+                platform_post.image_url,
+                db
+            )
+        elif platform_name == "instagram":
+            service = InstagramPostingService()
+            result = await service.post_content(
+                str(current_user.id),
+                platform_post.post_text,
+                platform_post.image_url,
+                db
+            )
         else:
-            # Store error message on failure
-            platform_post.error_message = f"n8n publishing failed: {response.status_code}"
+            raise HTTPException(status_code=400, detail=f"Unsupported platform: {platform_name}")
+
+        # Update publish status on success
+        platform_post.published = True
+        platform_post.published_at = datetime.utcnow()
+        platform_post.external_post_id = result.get("post_id")
+        platform_post.external_post_url = result.get("url")
+        db.commit()
+
+        return {
+            "message": f"Post published to {platform_post.platform_name}",
+            "platform_id": platform_id,
+            "status": "published",
+            "post_url": result.get("url"),
+            "platform_response": result
+        }
+
     except Exception as e:
-        print(f"Error calling n8n publish: {str(e)}")
-        platform_post.error_message = f"Error calling n8n: {str(e)}"
-        # Don't fail the request if n8n is not available
+        # Store error message on failure
+        platform_post.error_message = str(e)
+        platform_post.updated_at = datetime.utcnow()
+        db.commit()
 
-    platform_post.updated_at = datetime.utcnow()
-    db.commit()
-
-    return {
-        "message": f"Post published to {platform_post.platform_name}",
-        "platform_id": platform_id,
-        "status": "published" if platform_post.published else "failed"
-    }
+        raise HTTPException(status_code=500, detail=f"Publishing failed: {str(e)}")
 
 @router.post("/publish-multiple")
 async def publish_multiple_posts(

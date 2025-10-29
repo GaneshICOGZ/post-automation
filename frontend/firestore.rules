@@ -1,0 +1,107 @@
+/**
+ * @file Firebase Security Rules for the Social Swirl application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for user profiles and their associated posts. Public read access is granted to the writingStyles and preferences collections.
+ *
+ * Data Structure:
+ * - User profiles are stored under `/users/{userId}`, where `{userId}` corresponds to the Firebase Auth UID.
+ * - User-generated posts are stored under `/users/{userId}/posts/{postId}`.
+ * - Globally available writing styles are stored under `/writingStyles/{writingStyleId}`.
+ * - Globally available preferences are stored under `/preferences/{preferenceId}`.
+ *
+ * Key Security Decisions:
+ * - Users can only read and write their own profile data and their own posts.
+ * - Listing of user documents is disallowed for security reasons.
+ * - Writing styles and preferences are publicly readable but not writable via the client.
+ * - The rules explicitly deny any unauthorized access attempts.
+ *
+ * Denormalization for Authorization:
+ *  - The userId is embedded in the path for both /users/{userId} and /users/{userId}/posts/{postId} allowing for fast ownership checks without additional reads.
+ *
+ * Structural Segregation:
+ *  - User-specific data (profiles and posts) is stored separately from global data (writing styles and preferences), which allows for different security rules to be applied to each type of data.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Controls access to user profile documents.
+     * @path /users/{userId}
+     * @allow (create) Signed-in user with UID 'user123' can create their profile at /users/user123.
+     * @allow (update) Signed-in user with UID 'user123' can update their profile at /users/user123.
+     * @deny (create) Signed-in user with UID 'user123' cannot create a profile at /users/user456 (mismatched ID).
+     * @deny (update) Signed-in user with UID 'user123' cannot update the profile at /users/user456 (mismatched ID).
+     * @principle Enforces document ownership for writes, ensuring users can only modify their own profile.
+     */
+    match /users/{userId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false; // Listing users is not permitted.
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && resource.data.id == userId;
+      allow delete: if false; // Deletion is not allowed in this prototype.
+    }
+
+    /**
+     * @description Controls access to writing style documents.
+     * @path /writingStyles/{writingStyleId}
+     * @allow (get) Any user can read a writing style document.
+     * @allow (list) Any user can list writing style documents.
+     * @deny (create) No user can create a writing style document.
+     * @deny (update) No user can update a writing style document.
+     * @deny (delete) No user can delete a writing style document.
+     * @principle Public read access for globally available writing styles, write access restricted.
+     */
+    match /writingStyles/{writingStyleId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Controls access to preference documents.
+     * @path /preferences/{preferenceId}
+     * @allow (get) Any user can read a preference document.
+     * @allow (list) Any user can list preference documents.
+     * @deny (create) No user can create a preference document.
+     * @deny (update) No user can update a preference document.
+     * @deny (delete) No user can delete a preference document.
+     * @principle Public read access for globally available preferences, write access restricted.
+     */
+    match /preferences/{preferenceId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    /**
+     * @description Controls access to post documents nested under a user.
+     * @path /users/{userId}/posts/{postId}
+     * @allow (create) Signed-in user with UID 'user123' can create a post under /users/user123/posts/post1.
+     * @allow (update) Signed-in user with UID 'user123' can update their post under /users/user123/posts/post1.
+     * @allow (delete) Signed-in user with UID 'user123' can delete their post under /users/user123/posts/post1.
+     * @deny (create) Signed-in user with UID 'user123' cannot create a post under /users/user456/posts/post1 (mismatched user ID).
+     * @deny (update) Signed-in user with UID 'user123' cannot update a post under /users/user456/posts/post1 (mismatched user ID).
+     * @deny (delete) Signed-in user with UID 'user123' cannot delete a post under /users/user456/posts/post1 (mismatched user ID).
+     * @principle Enforces document ownership, restricting access to a user's own posts.
+     */
+    match /users/{userId}/posts/{postId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+  }
+}

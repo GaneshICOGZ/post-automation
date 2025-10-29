@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from .database import get_db, engine
 from .models import Base
-from .routers import auth, posts, trends
+from .routers import auth, posts, trends, oauth
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -27,6 +27,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(oauth.router, prefix="/auth", tags=["oauth"])
 app.include_router(posts.router, prefix="/posts", tags=["posts"])
 app.include_router(trends.router, prefix="/trends", tags=["trends"])
 
